@@ -52,7 +52,8 @@ spec:
         app: iperf3-server
     spec:
       serviceAccountName: iperf3-admin
-      nodeName: worker1 # Schedule this pod on node 'worker1'
+      nodeSelector:
+        node-role.kubernetes.io/worker: ""  # Updated labelSelector
       containers:
         - name: iperf3
           image: quay.io/midu/iperf3:latest
@@ -64,16 +65,16 @@ spec:
             capabilities:
               drop:
                 - ALL                       # Drop all capabilities
-            runAsNonRoot: true              # Run as non-root
+            runAsNonRoot: true                 # Run as non-root
             seccompProfile:
-              type: RuntimeDefault          # Use the default seccomp profile
+              type: RuntimeDefault             # Use the default seccomp profile
           resources:
             limits:
-              cpu: "500m"                   # Set a CPU limit
-              memory: "256Mi"               # Set a memory limit
+              cpu: "500m"       # Set a CPU limit
+              memory: "256Mi"   # Set a memory limit
             requests:
-              cpu: "250m"                   # Set a CPU request
-              memory: "128Mi"               # Set a memory request
+              cpu: "250m"       # Set a CPU request
+              memory: "128Mi"   # Set a memory request
 
 ---
 apiVersion: v1
@@ -112,7 +113,8 @@ spec:
         app: iperf3-client
     spec:
       serviceAccountName: iperf3-admin
-      nodeName: worker1 # Schedule this pod on node 'worker1'
+      nodeSelector:
+        nokia-vcu-scheduling-group: "central"  # Updated labelSelector
       containers:
         - name: iperf3
           image: quay.io/midu/iperf3:latest
@@ -128,7 +130,7 @@ spec:
           resources:
             limits:
               cpu: "500m"                   # Set a CPU limit
-              memory: "256Mi"               # Set a memory limit
+              memory: "256Mi"   # Set a memory limit
             requests:
-              cpu: "250m"                   # Set a CPU request
-              memory: "128Mi"               # Set a memory request
+              cpu: "250m"       # Set a CPU request
+              memory: "128Mi"   # Set a memory request
