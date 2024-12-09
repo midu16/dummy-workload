@@ -1,0 +1,134 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: iperf3-ns
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: iperf3-admin
+  namespace: iperf3-ns
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: iperf3-admin-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services"]
+    verbs: ["get", "list", "watch", "create", "update", "delete"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: iperf3-admin-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: iperf3-admin
+    namespace: iperf3-ns
+roleRef:
+  kind: ClusterRole
+  name: iperf3-admin-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iperf3-server
+  namespace: iperf3-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iperf3-server
+  template:
+    metadata:
+      labels:
+        app: iperf3-server
+    spec:
+      serviceAccountName: iperf3-admin
+      nodeName: worker1 # Schedule this pod on node 'worker1'
+      containers:
+        - name: iperf3
+          image: quay.io/midu/iperf3:latest
+          ports:
+            - containerPort: 60092
+          command: ["iperf3", "-s", "-p", "60092"] # Start iperf3 server on port 60092
+          securityContext:
+            allowPrivilegeEscalation: false # Prevent privilege escalation
+            capabilities:
+              drop:
+                - ALL                       # Drop all capabilities
+            runAsNonRoot: true              # Run as non-root
+            seccompProfile:
+              type: RuntimeDefault          # Use the default seccomp profile
+          resources:
+            limits:
+              cpu: "500m"                   # Set a CPU limit
+              memory: "256Mi"               # Set a memory limit
+            requests:
+              cpu: "250m"                   # Set a CPU request
+              memory: "128Mi"               # Set a memory request
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iperf3-service
+  namespace: iperf3-ns
+spec:
+  selector:
+    app: iperf3-server
+  ports:
+    - name: tcp-60092
+      protocol: TCP
+      port: 60092
+      targetPort: 60092
+    - name: udp-60092
+      protocol: UDP
+      port: 60092
+      targetPort: 60092
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iperf3-client
+  namespace: iperf3-ns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iperf3-client
+  template:
+    metadata:
+      labels:
+        app: iperf3-client
+    spec:
+      serviceAccountName: iperf3-admin
+      nodeName: worker1 # Schedule this pod on node 'worker1'
+      containers:
+        - name: iperf3
+          image: quay.io/midu/iperf3:latest
+          command: ["iperf3", "-c", "iperf3-service", "-p", "60092", "-u", "-t", "10", "-l", "1800"]  # UDP test for 10 seconds and 1800 MTU
+          securityContext:
+            allowPrivilegeEscalation: false # Prevent privilege escalation
+            capabilities:
+              drop:
+                - ALL                       # Drop all capabilities
+            runAsNonRoot: true              # Run as non-root
+            seccompProfile:
+              type: RuntimeDefault          # Use the default seccomp profile
+          resources:
+            limits:
+              cpu: "500m"                   # Set a CPU limit
+              memory: "256Mi"               # Set a memory limit
+            requests:
+              cpu: "250m"                   # Set a CPU request
+              memory: "128Mi"               # Set a memory request
