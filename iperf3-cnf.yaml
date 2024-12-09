@@ -114,7 +114,7 @@ spec:
     spec:
       serviceAccountName: iperf3-admin
       nodeSelector:
-        nokia-vcu-scheduling-group: "central"  # Updated labelSelector
+        node-role.kubernetes.io/worker: ""  # Updated labelSelector
       containers:
         - name: iperf3
           image: quay.io/midu/iperf3:latest
