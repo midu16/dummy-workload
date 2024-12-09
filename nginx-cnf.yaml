@@ -1,0 +1,130 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: time-logger
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: time-logger-server
+  namespace: time-logger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: time-logger-server
+  template:
+    metadata:
+      labels:
+        app: time-logger-server
+    spec:
+      containers:
+        - name: http-time-server
+          image: quay.io/midu/python:3.9-slim
+          command: ["python3", "-m", "http.server", "8080"]
+          workingDir: /app
+          volumeMounts:
+            - name: time-logger-script
+              mountPath: /app
+          lifecycle:
+            postStart:
+              exec:
+                command: ["/bin/sh", "-c", "while true; do echo $(date) >> time.log; sleep 1; done"]
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: time-logger-script
+          emptyDir: {}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-webserver
+  namespace: time-logger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-webserver
+  template:
+    metadata:
+      labels:
+        app: nginx-webserver
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: time-logger
+data:
+  default.conf: |
+    server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+            proxy_pass http://time-logger-service:8080;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: time-logger-service
+  namespace: time-logger
+spec:
+  selector:
+    app: time-logger-server
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+  namespace: time-logger
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx-webserver
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
